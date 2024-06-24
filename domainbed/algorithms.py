@@ -26,6 +26,7 @@ from domainbed.lib.misc import (
     MovingAverage, l2_between_dicts, proj, Nonparametric
 )
 
+from domainbed import networks
 from domainbed.sagm import SAGM, LinearScheduler
 
 
@@ -129,11 +130,16 @@ class M2CL(Algorithm):
         else:
             self.network = M2CL50(pretrained=True, num_classes=num_classes)
         
-        self.optimizer = torch.optim.SGD(
+        # self.optimizer = torch.optim.SGD(
+        #     self.network.parameters(),
+        #     lr=hparams['lr'],
+        #     weight_decay=0.0005,
+        #     momentum=0.9
+        # )
+        self.optimizer = torch.optim.Adam(
             self.network.parameters(),
-            lr=hparams['lr'],
-            weight_decay=0.0005,
-            momentum=0.9
+            lr=self.hparams["lr"],
+            weight_decay=self.hparams['weight_decay']
         )
 
     def update(self, minibatches, unlabeled=None):
@@ -175,8 +181,8 @@ class M2CL(Algorithm):
 
         return {'loss': loss.item()}
 
-    def predict(self, x):
-        return self.network(x)
+    def predict(self, x, collect=False):
+        return self.network(x, collect=collect)
 
 
 class POEM(Algorithm):
@@ -391,9 +397,12 @@ class ERM(Algorithm):
 
         return {'loss': loss.item()}
 
-    def predict(self, x):
+    def predict(self, x, collect=False):
+        if collect:
+            feature = self.featurizer(x)
+            x = self.classifier(feature)
+            return x, feature
         return self.network(x)
-
 
 class Fish(Algorithm):
     """

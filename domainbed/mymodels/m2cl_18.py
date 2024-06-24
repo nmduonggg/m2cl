@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torchvision
 import torch.nn.functional as F
 from torch.hub import load_state_dict_from_url
 from collections import OrderedDict
@@ -221,14 +222,23 @@ class ResNet(nn.Module):
         return self._forward_impl(x)
 
 
-def _resnet(arch, block, layers, pretrained, progress, **kwargs):
-    model = ResNet(block, layers, **kwargs)
-    if pretrained:
-        state_dict = load_state_dict_from_url(model_urls[arch],
-                                              progress=progress)
-        model.load_state_dict(state_dict)
-    return model
+# def _resnet(arch, block, layers, pretrained, progress, **kwargs):
+#     model = ResNet(block, layers, **kwargs)
+#     if pretrained:
+#         state_dict = load_state_dict_from_url(model_urls[arch],
+#                                               progress=progress)
+#         model.load_state_dict(state_dict)
+#     return model
 
+
+def _resnet(arch, block, layers, pretrained, progress, **kwargs):
+    if arch=='resnet18':
+        model = torchvision.models.resnet18(pretrained=pretrained)
+    elif arch=='resnet50':
+        model = torchvision.models.resnet50(pretrained=pretrained)
+    else:
+        assert(0), "Invalid architecture"
+    return model
 
 def resnet18(pretrained=False, progress=True, **kwargs):
     r"""ResNet-18 model from
@@ -719,8 +729,12 @@ class M2CL18(nn.Module):
         # Hypercolumn top layers
         # self.fc_feat = nn.Linear(276608//p, self.features)
         self.fc_hc = nn.Linear(149504, self.classes)
+        
+        for m in self.modules():
+            if isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                m.eval()
 
-    def forward_hyper(self, x):
+    def forward_hyper(self, x, collect=False):
         x = self.conv0(x)
         x = self.bn0(x)
         x = self.relu0(x)
@@ -847,6 +861,8 @@ class M2CL18(nn.Module):
                         out16,
             # add02_0, add04_0,
             add05_0, add06_0, add07_0], 1)
+        
+        last_feat = hc.clone().detach()
 
         out_conv = [out1_conv, out2_conv, out3_conv, out5_conv,
                     out8_conv, out11_conv, out12_conv, out14_conv, out15_conv,
@@ -855,10 +871,14 @@ class M2CL18(nn.Module):
         out_conv = [item for sublist in out_conv for item in sublist]
         # hc = self.fc_feat(hc)
         # hc = nn.ReLU(inplace=True)(hc)
+        
         hc = self.fc_hc(hc)
 
+        if collect:
+            return hc, out_conv, last_feat
+        
         return hc, out_conv
 
-    def forward(self, x):
-        return self.forward_hyper(x)
+    def forward(self, x, collect=False):
+        return self.forward_hyper(x, collect=collect)
 

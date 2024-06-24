@@ -92,10 +92,10 @@ if __name__ == "__main__":
         hparams['batch_size'] = args.batch_size
     if args.lr is not None:
         hparams['lr'] = args.lr
-    if args.temp is not None:
-        hparams['temp'] = args.temp
-    if args.lparam is not None:
-        hparams['lparam'] = args.lparam
+        
+    hparams['lparam'] = args.lparam
+    hparams['temp'] = args.temp
+    
     print('HParams:')
     for k, v in sorted(hparams.items()):
         print('\t{}: {}'.format(k, v))
@@ -135,11 +135,11 @@ if __name__ == "__main__":
     for env_i, env in enumerate(dataset):
         uda = []
 
-        out, in_ = misc.split_dataset(env,
+        out, in_ = misc.split_dataset(env,  # out: test, in: train
             int(len(env)*args.holdout_fraction),
             misc.seed_hash(args.trial_seed, env_i))
 
-        if env_i in args.test_envs:
+        if env_i in args.test_envs: # uda is taken from in_ set 
             uda, in_ = misc.split_dataset(in_,
                 int(len(in_)*args.uda_holdout_fraction),
                 misc.seed_hash(args.trial_seed, env_i))
@@ -220,11 +220,18 @@ if __name__ == "__main__":
         }
         torch.save(save_dict, os.path.join(args.output_dir, filename))
 
+    def adjust_best_results(cur_best, cur_results):
+        if cur_best is None: 
+            return cur_results
+        for k, v in cur_results.items():
+            if cur_best[k] < v: save_checkpoint(f"model_best_{k}.pkl")
+            cur_best[k] = max(v, cur_best[k])
+            
+        return cur_best
 
     last_results_keys = None
-
-    # if args.batch_size != 32:
-    #     n_steps = 5000 // (args.batch_size // 32)
+    
+    best_results = None
 
     for step in range(start_step, n_steps):
         step_start_time = time.time()
@@ -258,6 +265,8 @@ if __name__ == "__main__":
             results['mem_gb'] = torch.cuda.max_memory_allocated() / (1024.*1024.*1024.)
 
             results_keys = sorted(results.keys())
+            best_results = adjust_best_results(best_results, results)
+            
             if results_keys != last_results_keys:
                 misc.print_row(results_keys, colwidth=12)
                 last_results_keys = results_keys
@@ -279,8 +288,12 @@ if __name__ == "__main__":
 
             if args.save_model_every_checkpoint:
                 save_checkpoint(f'model_step{step}.pkl')
-
+                
     save_checkpoint('model.pkl')
+    
+    print("="*10, "Best Results", "="*10)
+    results_key = sorted(best_results.keys())
+    misc.print_row([best_results[key] for key in results_keys], colwidth=12)
 
     with open(os.path.join(args.output_dir, 'done'), 'w') as f:
         f.write('done')

@@ -579,11 +579,11 @@ class TestModel(nn.Module):
 
 
 class M2CL50(nn.Module):
-    def __init__(self, classes, features=200, p=4, pretrained=True):
+    def __init__(self, num_classes, features=200, p=4, pretrained=True):
         super(M2CL50, self).__init__()
         resnet = resnet50(pretrained=pretrained)
         # resnet = torchvision.models.resnet50(pretrained=pretrained)
-        self.classes = classes
+        self.classes = num_classes
         self.features = features
 
         layers = []

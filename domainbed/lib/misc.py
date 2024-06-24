@@ -12,9 +12,13 @@ from numbers import Number
 import operator
 
 import numpy as np
+import pandas as pd
 import torch
 from collections import Counter
 from itertools import cycle
+
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 
 def distance(h1, h2):
@@ -211,6 +215,60 @@ def accuracy(network, loader, weights, device):
     network.train()
 
     return correct / total
+
+def inference(network, x, weights, device):
+    
+    network.eval()
+    with torch.no_grad():
+        x = x.to(device)
+        p = network.predict(x) 
+        if isinstance(p, tuple):
+            p = p[0]
+        
+    return p
+
+def tsne_collect(network, loader, weights, device):
+    
+    network.eval()  
+    features = list()
+    with torch.no_grad():
+        for x, y in loader:
+            x = x.to(device)
+            y = y.to(device)
+            outs = network.predict(x, collect=True)
+            if len(outs)==3:
+                p, _, feature = outs
+            else:
+                p, feature = outs
+            features.append((feature.clone().detach(), y))
+            
+    return features
+
+def dataframe_from_features(features: dict, pca=False):
+    
+    df = {
+        'feature': [],
+        'label': [],
+        'domain': []
+    }
+    
+    for k, v in features.items():
+        features, labels = zip(*v)
+        features = torch.cat(features, dim=0).cpu().numpy()
+        
+        features = StandardScaler().fit_transform(features)
+        features = PCA(n_components=256, svd_solver='randomized').fit_transform(features)
+        
+        labels = torch.cat(labels, dim=0).cpu().numpy()
+        domains = [k] * labels.shape[0]
+        
+        df['feature'].append(features)
+        df['label'].append(labels)
+        df['domain'].append(domains)
+        
+    return df
+        
+            
 
 class Tee:
     def __init__(self, fname, mode="a"):
